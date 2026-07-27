@@ -403,14 +403,19 @@ static void release_acquired_buffer(struct ra_hwdec_mapper *mapper,
     if (!buffer)
         return;
 
-    OH_NativeWindow_NativeObjectUnreference(buffer);
+    // ReleaseNativeWindowBuffer only decrements the refcount on success.
+    // The extra NativeObjectReference from mapper_map is always balanced
+    // here; on failure we compensate for AcquireNativeWindowBuffer's +1
+    // with one more unreference to avoid leaking the underlying buffer.
     int ret = OH_NativeImage_ReleaseNativeWindowBuffer(owner->surface->image,
                                                         buffer, fence_fd);
     if (ret != NATIVE_ERROR_OK) {
+        OH_NativeWindow_NativeObjectUnreference(buffer);
         if (fence_fd >= 0)
             close(fence_fd);
         MP_ERR(mapper, "ReleaseNativeWindowBuffer failed: %d\n", ret);
     }
+    OH_NativeWindow_NativeObjectUnreference(buffer);
 }
 
 static void release_window_buffer(struct ra_hwdec_mapper *mapper, int fence_fd)
@@ -534,8 +539,8 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
     VkResult vkres = v->acquire_image(v->vk->device, e->image, fence_fd,
                                       e->acquire_sem, VK_NULL_HANDLE);
     if (vkres != VK_SUCCESS) {
-        if (fence_fd >= 0)
-            close(fence_fd);
+        // vkAcquireImageOHOS takes ownership of fenceFd in all cases
+        // (success and failure), so do not close it here.
         MP_ERR(mapper, "vkAcquireImageOHOS failed: %d\n", vkres);
         release_acquired_buffer(mapper, wb, -1);
         return NATIVE_ERROR_UNKNOWN;
