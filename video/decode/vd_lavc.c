@@ -21,6 +21,8 @@
 #include <assert.h>
 #include <stdbool.h>
 
+#include "config.h"
+
 #include <libavcodec/avcodec.h>
 #include <libavformat/version.h>
 #include <libavutil/common.h>
@@ -28,6 +30,10 @@
 #include <libavutil/opt.h>
 #include <libavutil/intreadwrite.h>
 #include <libavutil/pixdesc.h>
+
+#if HAVE_OHOS
+#include <libavcodec/ohcodec_buffer.h>
+#endif
 
 #include "mpv_talloc.h"
 #include "common/msg.h"
@@ -84,6 +90,7 @@ struct vd_lavc_params {
     bool check_hw_profile;
     char **avopts;
     int dr;
+    bool ohos_smart_fluency;
 };
 
 static const struct m_opt_choice_alternatives discard_names[] = {
@@ -115,6 +122,7 @@ const struct m_sub_options vd_lavc_conf = {
         {"vd-lavc-dr", OPT_CHOICE(dr,
             {"auto", -1}, {"no", 0}, {"yes", 1})},
         {"vd-apply-cropping", OPT_BOOL(apply_cropping)},
+        {"vd-lavc-ohos-smart-fluency", OPT_BOOL(ohos_smart_fluency)},
         {0}
     },
     .change_flags = UPDATE_VD,
@@ -213,6 +221,9 @@ typedef struct lavc_ctx {
     bool hwdec_failed;
     bool hwdec_notified;
     bool force_eof;
+
+    // Current playback speed pushed via VDCTRL_SET_SPEED.
+    double playback_speed;
 
     bool intra_only;
     int framedrop_flags;
@@ -1148,6 +1159,18 @@ static void prepare_decoding(struct mp_filter *vd)
 
     if (ctx->hwdec_request_reinit)
         reset_avctx(vd);
+
+#if HAVE_OHOS
+    // HarmonyOS smart fluency: keep the OHCodec decoder's frame retention
+    // mode in sync with the effective frame rate (fps * speed). Opt-in via
+    // --vd-lavc-ohos-smart-fluency; no-op for non-OHCodec decoders and on
+    // systems without the capability.
+    if (ctx->opts->ohos_smart_fluency && ctx->avctx) {
+        av_ohcodec_dec_set_fluency_state(ctx->avctx,
+                                         ctx->codec ? ctx->codec->fps : 0,
+                                         ctx->playback_speed);
+    }
+#endif
 }
 
 static void handle_err(struct mp_filter *vd)
@@ -1366,6 +1389,9 @@ static int control(struct mp_filter *vd, enum dec_ctrl cmd, void *arg)
     case VDCTRL_SET_FRAMEDROP:
         ctx->framedrop_flags = *(int *)arg;
         return CONTROL_TRUE;
+    case VDCTRL_SET_SPEED:
+        ctx->playback_speed = *(double *)arg;
+        return CONTROL_TRUE;
     case VDCTRL_CHECK_FORCED_EOF: {
         *(bool *)arg = ctx->force_eof;
         return CONTROL_TRUE;
@@ -1451,6 +1477,7 @@ static struct mp_decoder *create(struct mp_filter *parent,
     ctx->hwdec_opts = ctx->hwdec_opts_cache->opts;
     ctx->codec = codec;
     ctx->decoder = talloc_strdup(ctx, decoder);
+    ctx->playback_speed = 1.0;
     ctx->hwdec_swpool = mp_image_pool_new(ctx);
     ctx->dr_pool = mp_image_pool_new(ctx);
 

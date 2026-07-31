@@ -539,8 +539,8 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
     VkResult vkres = v->acquire_image(v->vk->device, e->image, fence_fd,
                                       e->acquire_sem, VK_NULL_HANDLE);
     if (vkres != VK_SUCCESS) {
-        // vkAcquireImageOHOS takes ownership of fenceFd in all cases
-        // (success and failure), so do not close it here.
+        if (fence_fd >= 0)
+            close(fence_fd);
         MP_ERR(mapper, "vkAcquireImageOHOS failed: %d\n", vkres);
         release_acquired_buffer(mapper, wb, -1);
         return NATIVE_ERROR_UNKNOWN;

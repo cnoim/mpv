@@ -191,6 +191,11 @@ int init_video_decoder(struct MPContext *mpctx, struct track *track)
     if (!mp_decoder_wrapper_reinit(track->dec))
         goto err_out;
 
+    // Propagate the current playback speed (used by decoder-side features
+    // such as OHCodec smart fluency frame retention control).
+    mp_decoder_wrapper_control(track->dec, VDCTRL_SET_SPEED,
+                               &mpctx->opts->playback_speed);
+
     return 1;
 
 err_out:

@@ -75,6 +75,8 @@ enum dec_ctrl {
     // framedrop mode: 0=none, 1=standard, 2=hrseek
     VDCTRL_SET_FRAMEDROP,
     VDCTRL_CHECK_FORCED_EOF,
+    // arg: double*, current playback speed (opts->playback_speed)
+    VDCTRL_SET_SPEED,
 };
 
 int mp_decoder_wrapper_control(struct mp_decoder_wrapper *d,

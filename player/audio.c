@@ -200,6 +200,16 @@ void update_playback_speed(struct MPContext *mpctx)
     mpctx->video_speed = mpctx->opts->playback_speed * mpctx->speed_factor_v;
 
     update_speed_filters(mpctx);
+
+    // Keep video decoders informed about the playback speed (used by
+    // decoder-side features such as OHCodec smart fluency).
+    for (int n = 0; n < mpctx->num_tracks; n++) {
+        struct track *track = mpctx->tracks[n];
+        if (track->type == STREAM_VIDEO && track->dec) {
+            mp_decoder_wrapper_control(track->dec, VDCTRL_SET_SPEED,
+                                       &mpctx->opts->playback_speed);
+        }
+    }
 }
 
 static bool has_video_track(struct MPContext *mpctx)
