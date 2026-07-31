@@ -1391,6 +1391,12 @@ static int control(struct mp_filter *vd, enum dec_ctrl cmd, void *arg)
         return CONTROL_TRUE;
     case VDCTRL_SET_SPEED:
         ctx->playback_speed = *(double *)arg;
+#if HAVE_OHOS
+        if (ctx->opts->ohos_smart_fluency)
+            MP_INFO(vd, "Smart fluency input: video fps %.6g, speed %.6g "
+                    "(ADAPTIVE engages above fps*speed=120)\n",
+                    ctx->codec ? ctx->codec->fps : 0, ctx->playback_speed);
+#endif
         return CONTROL_TRUE;
     case VDCTRL_CHECK_FORCED_EOF: {
         *(bool *)arg = ctx->force_eof;
