@@ -91,6 +91,7 @@ struct vd_lavc_params {
     char **avopts;
     int dr;
     bool ohos_smart_fluency;
+    bool ohos_vrr;
 };
 
 static const struct m_opt_choice_alternatives discard_names[] = {
@@ -123,6 +124,7 @@ const struct m_sub_options vd_lavc_conf = {
             {"auto", -1}, {"no", 0}, {"yes", 1})},
         {"vd-apply-cropping", OPT_BOOL(apply_cropping)},
         {"vd-lavc-ohos-smart-fluency", OPT_BOOL(ohos_smart_fluency)},
+        {"vd-lavc-ohos-vrr", OPT_BOOL(ohos_vrr)},
         {0}
     },
     .change_flags = UPDATE_VD,
@@ -1169,6 +1171,16 @@ static void prepare_decoding(struct mp_filter *vd)
         av_ohcodec_dec_set_fluency_state(ctx->avctx,
                                          ctx->codec ? ctx->codec->fps : 0,
                                          ctx->playback_speed);
+    }
+    // HarmonyOS variable refresh rate: let the decoder drive the screen
+    // refresh rate from the content fps. Opt-in via --vd-lavc-ohos-vrr;
+    // only effective for the OHCodec Surface (zero-copy) path. Note: VRR
+    // adjusts the whole-screen refresh rate, so it can harm danmaku/animation
+    // smoothness -- disable it when those are active.
+    if (ctx->opts->ohos_vrr && ctx->avctx) {
+        double f = ctx->codec ? ctx->codec->fps : 0;
+        int32_t fps = f > 0 ? (int32_t)(f + 0.5) : 0;
+        av_ohcodec_dec_set_vrr(ctx->avctx, fps, 1);
     }
 #endif
 }
